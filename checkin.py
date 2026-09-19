@@ -575,6 +575,7 @@ async def main():
 			notification_content.append(f'[FAIL] {account_name} exception: {str(e)[:50]}...')
 
 	current_balance_hash = generate_balance_hash(current_balances) if current_balances else None
+	always_notify = os.getenv('NOTIFY_ALWAYS', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
 	if current_balance_hash:
 		if last_balance_hash is None:
 			balance_changed = True
@@ -587,7 +588,11 @@ async def main():
 		else:
 			print('[INFO] No balance changes detected')
 
-	if balance_changed:
+	if always_notify:
+		need_notify = True
+		print('[NOTIFY] NOTIFY_ALWAYS enabled, will send a report for this run')
+
+	if balance_changed or always_notify:
 		for i, account in enumerate(accounts):
 			account_key = f'account_{i + 1}'
 			if account_key in account_check_in_details:
@@ -600,7 +605,7 @@ async def main():
 	if current_balance_hash:
 		save_balance_hash(current_balance_hash)
 
-	if need_notify and notification_content:
+	if need_notify:
 		summary = [
 			'[STATS] Check-in result statistics:',
 			f'[SUCCESS] Success: {success_count}/{total_count}',
@@ -616,7 +621,8 @@ async def main():
 
 		time_info = f'[TIME] Execution time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
 
-		notify_content = '\n\n'.join([time_info, '\n'.join(notification_content), '\n'.join(summary)])
+		account_content = '\n'.join(notification_content) or '[INFO] No account details available'
+		notify_content = '\n\n'.join([time_info, account_content, '\n'.join(summary)])
 		screenshot_paths = take_pending_screenshots() if is_debug_enabled() else []
 		if screenshot_paths:
 			github_run_id = os.getenv('GITHUB_RUN_ID', '').strip()
@@ -631,7 +637,7 @@ async def main():
 
 		print(notify_content)
 		notify.push_message('AnyRouter Check-in Alert', notify_content, msg_type='text')
-		print('[NOTIFY] Notification sent due to failures or balance changes')
+		print('[NOTIFY] Notification dispatch completed')
 	else:
 		print('[INFO] All accounts successful and no balance changes detected, notification skipped')
 
